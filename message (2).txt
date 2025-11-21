@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2차 대전 전투기 - 에이스 윙즈 (God Mode)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CSS Keyframes */
+        @keyframes spin { from { opacity: 0.4; } to { opacity: 0.7; } }
+        @keyframes clouds { from { transform: translateY(0); } to { transform: translateY(100%); } }
+        @keyframes landScroll { from { transform: translateY(-50%); } to { transform: translateY(0%); } }
+        
+        @keyframes flash { 
+            0% { opacity: 1; transform: scale(1, 1); }
+            50% { opacity: 0.8; transform: scale(1.2, 1.5); }
+            100% { opacity: 0; transform: scale(0.8, 0.8); }
+        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        
+        @keyframes miss-float { 
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-30px) scale(1.2); opacity: 0; }
+        }
+
+        @keyframes aa-charge {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0.5; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+        }
+        @keyframes aa-explode {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; background-color: rgba(239, 68, 68, 0.9); }
+            100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+        }
+
+        /* God Mode Shield Animation */
+        @keyframes shieldPulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; border-color: rgba(59, 130, 246, 0.6); }
+            50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.8; border-color: rgba(59, 130, 246, 1); }
+        }
+
+        .bg-cloud-scroll { animation: clouds 15s linear infinite; }
+        .bg-land-scroll { animation: landScroll 30s linear infinite; }
+
+        .plane-entity {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            transform-origin: center center;
+            will-change: transform;
+            z-index: 100;
+            transform-style: preserve-3d; 
+        }
+        
+        .plane-entity.heavy-enemy { width: 180px; height: 180px; z-index: 98; }
+        .plane-entity.naval-enemy { width: 150px; height: 150px; z-index: 99; }
+        .plane-entity.support-plane { opacity: 0.9; filter: drop-shadow(10px 10px 5px rgba(0,0,0,0.3)) sepia(0.3) hue-rotate(180deg) saturate(2); }
+
+        .plane-body {
+            width: 100%;
+            height: 100%;
+            transition: transform 0.1s linear;
+            filter: drop-shadow(15px 15px 8px rgba(0,0,0,0.3));
+        }
+
+        /* God Mode Shield Style */
+        .god-mode-shield {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 180px; height: 180px;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 3px solid #3b82f6;
+            background-color: rgba(59, 130, 246, 0.15);
+            box-shadow: 0 0 15px #3b82f6, inset 0 0 10px rgba(59, 130, 246, 0.3);
+            pointer-events: none;
+            z-index: 105;
+            display: none; /* Hidden by default */
+            animation: shieldPulse 1.5s infinite ease-in-out;
+        }
+
+        #player-container { z-index: 110; }
+
+        #target-cursor {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px dashed rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            z-index: 200;
+        }
+        #target-cursor.firing { border-color: rgba(255, 50, 50, 1); background: rgba(255, 0, 0, 0.2); }
+
+        .bullet { position: absolute; border-radius: 2px; pointer-events: none; z-index: 105; }
+        .bullet.light { width: 4px; height: 12px; background: #ffeb3b; box-shadow: 0 0 4px #ff9800; }
+        .bullet.heavy { width: 6px; height: 16px; background: #ff5722; box-shadow: 0 0 6px #ff0000; }
+        .bullet.cannon { width: 8px; height: 20px; background: #ef4444; border: 1px solid #7f1d1d; }
+        .bullet.turret { width: 4px; height: 8px; background: #fbbf24; border: 1px solid #b45309; box-shadow: 0 0 4px yellow; }
+        .bullet.support { width: 5px; height: 14px; background: #60a5fa; box-shadow: 0 0 6px #3b82f6; } 
+        .bullet.enemy { width: 5px; height: 12px; background: #ffffff; border: 1px solid #000; z-index: 105; }
+        .bullet.enemy-heavy { width: 6px; height: 16px; background: #ffaaaa; border: 1px solid #800; z-index: 105; }
+
+        .xp-orb {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: radial-gradient(circle at 30% 30%, #fef08a, #eab308);
+            border-radius: 50%;
+            box-shadow: 0 0 12px #facc15;
+            z-index: 95; 
+            border: 2px solid #fff;
+        }
+        .xp-orb.rare { width: 22px; height: 22px; background: radial-gradient(circle at 30% 30%, #60a5fa, #2563eb); box-shadow: 0 0 15px #3b82f6; border-color: #bfdbfe; }
+        .xp-orb.huge { width: 30px; height: 30px; background: radial-gradient(circle at 30% 30%, #e879f9, #a21caf); box-shadow: 0 0 20px #d946ef; border-color: #f0abfc; }
+
+        .island-entity { position: absolute; z-index: 20; pointer-events: none; }
+        .carrier-entity { position: absolute; z-index: 25; pointer-events: none; filter: drop-shadow(5px 5px 10px rgba(0,0,0,0.4)); }
+        .aa-turret { position: absolute; width: 24px; height: 24px; z-index: 25; transform-origin: center center; }
+        .aa-zone { position: absolute; z-index: 90; pointer-events: none; }
+        .aa-inner { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; background-color: rgba(239, 68, 68, 0.3); border: 2px solid rgba(239, 68, 68, 0.8); border-radius: 50%; transform: translate(-50%, -50%) scale(0); animation: aa-charge 2s linear forwards; }
+        .aa-explosion { animation: aa-explode 0.5s ease-out forwards; }
+
+        .miss-text { position: absolute; color: #60a5fa; font-weight: bold; font-size: 1.5rem; z-index: 300; pointer-events: none; text-shadow: 2px 2px 0px #1e3a8a; animation: miss-float 1s forwards; }
+
+        .muzzle-flash { display: none; fill: #FFF700; filter: drop-shadow(0 0 5px orange); transform-box: fill-box; transform-origin: center bottom; }
+        .firing .muzzle-flash { display: block; animation: flash 0.05s infinite alternate; }
+        .firing .muzzle-flash.hidden { display: none !important; }
+        #turret-flash { display: none; fill: #FFF700; opacity: 0.8; transform-origin: center bottom; }
+        #turret-visual.firing #turret-flash { display: block; animation: flash 0.05s infinite; }
+        .do217-turret.firing #turret-flash { display: block; animation: flash 0.05s infinite; }
+
+        .propeller-line { fill: url(#propGrad); opacity: 0.5; }
+        
+        #blackout-overlay { pointer-events: none; background: radial-gradient(circle, transparent 20%, black 100%); transition: opacity 0.2s ease-out; mix-blend-mode: multiply; }
+        #damage-overlay { position: absolute; inset: 0; background-color: rgba(255, 0, 0, 0.3); pointer-events: none; opacity: 0; transition: opacity 0.1s; z-index: 250; }
+        #damage-overlay.hit { opacity: 1; }
+        #damage-overlay.armor-hit { background-color: rgba(59, 130, 246, 0.3); opacity: 1; }
+
+        #game-over-screen, #level-up-screen, #start-screen { display: none; }
+        #game-over-screen.active, #level-up-screen.active, #start-screen.active { display: flex; }
+
+        .upgrade-card { background: linear-gradient(145deg, #1a202c, #2d3748); border: 2px solid #4a5568; transition: all 0.2s; }
+        .upgrade-card:hover { transform: translateY(-5px); border-color: #fbbf24; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); }
+    </style>
+</head>
+<body class="bg-blue-900 overflow-hidden relative h-screen w-full select-none" oncontextmenu="return false;">
+
+    <div id="blackout-overlay" class="absolute inset-0 z-40 opacity-0 bg-black"></div>
+    <div id="damage-overlay"></div>
+    <div id="effect-container" class="absolute inset-0 pointer-events-none z-[300]"></div>
+    <div id="loc-warning" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 text-center hidden">
+        <h1 class="text-6xl font-black text-red-600 animate-pulse tracking-tighter drop-shadow-lg">G-LOC</h1>
+        <p class="text-white text-xl font-bold mt-2 bg-black/50 px-4 py-1 rounded">조종사 의식 불명</p>
+    </div>
+    <div id="armor-break-msg" class="absolute top-1/3 left-1/2 transform -translate-x-1/2 text-blue-400 font-bold text-2xl drop-shadow-lg opacity-0 transition-opacity duration-500 pointer-events-none z-50">방탄판 파괴됨!</div>
+
+    <div id="start-screen" class="absolute inset-0 z-[500] bg-black/80 flex flex-col items-center justify-center text-white active">
+        <h1 class="text-6xl font-bold text-sky-400 mb-4">에이스 윙즈 (ACE WINGS)</h1>
+        <p class="text-xl mb-8 text-gray-300">화면 아무 곳이나 클릭하여 시작하세요</p>
+        <div class="text-sm opacity-50">마우스: 조종 | L-Click: 사격 | R-Click: 편대 지원 | G: 무적 모드</div>
+    </div>
+
+    <div id="level-up-screen" class="absolute inset-0 z-[400] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+        <h2 class="text-5xl font-bold text-yellow-400 mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]">레벨 업!</h2>
+        <p class="text-gray-300 mb-8">업그레이드를 선택하세요</p>
+        <div id="cards-container" class="flex gap-6 max-w-6xl"></div>
+    </div>
+
+    <div id="game-over-screen" class="absolute inset-0 z-[300] bg-black/80 flex flex-col items-center justify-center text-white">
+        <h1 class="text-6xl font-bold text-red-500 mb-4">임무 중 손실 (MIA)</h1>
+        <p class="text-2xl mb-8">격추되었습니다</p>
+        <div class="text-xl mb-4">최종 레벨: <span id="final-level" class="text-yellow-400">1</span></div>
+        <div class="text-xl">격추 수: <span id="final-kill" class="text-red-400">0</span></div>
+        <button onclick="location.reload()" class="mt-8 px-6 py-3 bg-sky-600 hover:bg-sky-700 rounded-lg font-bold text-xl transition">다시 출격</button>
+    </div>
+
+    <div class="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 text-center pointer-events-none w-96">
+        <div class="bg-black/40 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-lg border border-white/10">
+            <div class="flex justify-between items-end mb-2">
+                <div class="flex items-baseline gap-3">
+                    <span class="font-bold text-xl text-yellow-400">LV.<span id="level-display">1</span></span>
+                    <span class="text-sm text-red-400 font-bold">☠️ <span id="kill-display">0</span></span>
+                </div>
+                <div class="flex flex-col items-end">
+                    <div class="text-[10px] text-sky-300" id="weapon-status">경기관총 LV.1</div>
+                    <div class="text-[10px] text-orange-300 hidden" id="turret-status">터렛 LV.1</div>
+                    <div class="text-[10px] text-blue-300 hidden" id="armor-status">방탄판: 0</div>
+                </div>
+            </div>
+            <div class="mb-3 relative">
+                <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-600">
+                    <div id="xp-bar" class="h-full bg-yellow-400 transition-all duration-200" style="width: 0%"></div>
+                </div>
+                <div class="absolute top-0 left-0 w-full h-full flex items-center justify-center text-[9px] text-black font-bold opacity-70">경험치</div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-left text-xs font-mono mb-2">
+                <div><span class="opacity-70">속도:</span> <span id="hud-speed">0</span></div>
+                <div><span class="opacity-70">G-힘:</span> <span id="hud-g" class="font-bold text-green-400">1.0</span></div>
+                <div><span class="opacity-70">회피:</span> <span id="hud-evasion" class="font-bold text-blue-400">0%</span></div>
+            </div>
+            <div class="mt-1">
+                <div class="flex justify-between text-[10px] mb-1 opacity-80">
+                    <span>조종사 체력 (G-LOC)</span><span id="stamina-text">100 / 100</span>
+                </div>
+                <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div id="stamina-bar" class="h-full bg-green-500 transition-all duration-100" style="width: 100%"></div>
+                </div>
+            </div>
+            <div class="mt-1">
+                <div class="flex justify-between text-[10px] mb-1 opacity-80">
+                    <span>기체 내구도</span><span id="hp-text">100%</span>
+                </div>
+                <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div id="hp-bar" class="h-full bg-blue-500 transition-all duration-200" style="width: 100%"></div>
+                </div>
+            </div>
+            <div class="mt-2">
+                <div class="flex justify-between text-[10px] mb-1 opacity-80">
+                    <span class="text-yellow-300 font-bold">지원 요청 (R-CLICK)</span><span id="bomb-text">READY</span>
+                </div>
+                <div class="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div id="bomb-bar" class="h-full bg-yellow-500 transition-all duration-200" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="land-layer" class="absolute inset-0 overflow-hidden pointer-events-none z-10"></div>
+    <div class="absolute inset-0 opacity-30 pointer-events-none z-30">
+        <svg width="100%" height="100%">
+            <pattern id="cloudPattern" x="0" y="0" width="400" height="400" patternUnits="userSpaceOnUse">
+                <circle cx="100" cy="100" r="60" fill="white" />
+                <circle cx="300" cy="240" r="80" fill="white" />
+                <circle cx="160" cy="360" r="40" fill="white" />
+            </pattern>
+            <rect width="100%" height="200%" fill="url(#cloudPattern)" class="bg-cloud-scroll top-[-100%] relative" />
+        </svg>
+    </div>
+    <div id="game-layer" class="absolute inset-0 overflow-hidden pointer-events-none z-40">
+        <div id="aa-container"></div> 
+        <div id="bullets-container"></div>
+        <div id="enemies-container"></div>
+        <div id="xp-container"></div>
+        <div id="support-container"></div> 
+    </div>
+
+    <div id="target-cursor"></div>
+    <div id="player-container" class="plane-entity">
+        <div id="player-body" class="plane-body"></div>
+        <!-- God Mode Shield Element -->
+        <div id="god-shield" class="god-mode-shield"></div>
+    </div>
+
+    <script>
+        // ... (Elements) ...
+        const playerContainer = document.getElementById('player-container');
+        const playerBody = document.getElementById('player-body');
+        const targetCursor = document.getElementById('target-cursor');
+        const bulletsContainer = document.getElementById('bullets-container');
+        const enemiesContainer = document.getElementById('enemies-container');
+        const xpContainer = document.getElementById('xp-container');
+        const supportContainer = document.getElementById('support-container');
+        const aaContainer = document.getElementById('aa-container');
+        const landLayer = document.getElementById('land-layer');
+        const effectContainer = document.getElementById('effect-container');
+        const hudSpeed = document.getElementById('hud-speed');
+        const hudG = document.getElementById('hud-g');
+        const hudEvasion = document.getElementById('hud-evasion'); 
+        const staminaBar = document.getElementById('stamina-bar');
+        const staminaText = document.getElementById('stamina-text');
+        const hpBar = document.getElementById('hp-bar');
+        const hpText = document.getElementById('hp-text');
+        const weaponStatus = document.getElementById('weapon-status');
+        const turretStatus = document.getElementById('turret-status');
+        const armorStatus = document.getElementById('armor-status');
+        const bombBar = document.getElementById('bomb-bar');
+        const bombText = document.getElementById('bomb-text');
+        const killDisplay = document.getElementById('kill-display'); 
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const damageOverlay = document.getElementById('damage-overlay');
+        const armorBreakMsg = document.getElementById('armor-break-msg');
+        const locWarning = document.getElementById('loc-warning');
+        const xpBar = document.getElementById('xp-bar');
+        const levelDisplay = document.getElementById('level-display');
+        const levelUpScreen = document.getElementById('level-up-screen');
+        const startScreen = document.getElementById('start-screen');
+        const cardsContainer = document.getElementById('cards-container');
+
+        let virtualMouseX = window.innerWidth / 2;
+        let virtualMouseY = window.innerHeight / 2;
+        let isMouseDown = false;
+        let isGameOver = false;
+        let isPaused = true; 
+        let isLoopRunning = false; 
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === document.body) {
+                isPaused = false;
+                targetCursor.style.display = 'block';
+                startScreen.classList.remove('active');
+                if (!isLoopRunning) gameLoop();
+            } else {
+                if (!isGameOver && !levelUpScreen.classList.contains('active')) {
+                    isPaused = true; 
+                    startScreen.classList.add('active'); 
+                    startScreen.querySelector('h1').textContent = "일시 정지";
+                    startScreen.querySelector('p').textContent = "클릭하여 재개";
+                }
+                targetCursor.style.display = 'none'; 
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === document.body) {
+                virtualMouseX += e.movementX;
+                virtualMouseY += e.movementY;
+                virtualMouseX = Math.max(0, Math.min(window.innerWidth, virtualMouseX));
+                virtualMouseY = Math.max(0, Math.min(window.innerHeight, virtualMouseY));
+                targetCursor.style.left = virtualMouseX + 'px';
+                targetCursor.style.top = virtualMouseY + 'px';
+            }
+        });
+
+        startScreen.addEventListener('click', () => { if (!isGameOver) document.body.requestPointerLock(); });
+        document.addEventListener('mousedown', (e) => {
+            if (isPaused || isGameOver) return;
+            if (e.button === 0) { isMouseDown = true; targetCursor.classList.add('firing'); playerContainer.classList.add('firing'); }
+            if (e.button === 2) triggerBomb();
+        });
+        window.oncontextmenu = (e) => e.preventDefault();
+        document.addEventListener('mouseup', () => {
+            isMouseDown = false; targetCursor.classList.remove('firing'); playerContainer.classList.remove('firing');
+        });
+
+        // God Mode Toggle
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyG') {
+                state.isGodMode = !state.isGodMode;
+                const shield = document.getElementById('god-shield');
+                if(state.isGodMode) {
+                    shield.style.display = 'block';
+                    showMiss(state.x, state.y - 50, "GOD MODE ON", "text-blue-400");
+                } else {
+                    shield.style.display = 'none';
+                    showMiss(state.x, state.y - 50, "GOD MODE OFF", "text-gray-400");
+                }
+            }
+        });
+
+        // SVGs
+        const spitfireSvg = `<svg viewBox="0 0 200 200" class="w-full h-full"><defs><linearGradient id="fuselageGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#556B2F;stop-opacity:1"/><stop offset="50%" style="stop-color:#6B8E23;stop-opacity:1"/><stop offset="100%" style="stop-color:#556B2F;stop-opacity:1"/></linearGradient><linearGradient id="propGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="transparent"/><stop offset="50%" stop-color="rgba(255,255,255,0.6)"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs><g id="guns-visual"><rect x="55" y="75" width="4" height="20" fill="#111" rx="1"/><rect x="141" y="75" width="4" height="20" fill="#111" rx="1"/><rect x="30" y="78" width="4" height="18" fill="#111" rx="1" class="gun-lvl2 opacity-0"/><rect x="166" y="78" width="4" height="18" fill="#111" rx="1" class="gun-lvl2 opacity-0"/><rect x="98" y="45" width="4" height="20" fill="#222" rx="1" class="gun-lvl3 opacity-0"/></g><g id="flash-visual"><path d="M 52 75 L 57 60 L 62 75 Z" class="muzzle-flash flash-inner"/><path d="M 138 75 L 143 60 L 148 75 Z" class="muzzle-flash flash-inner"/><path d="M 27 78 L 32 63 L 37 78 Z" class="muzzle-flash flash-outer hidden"/><path d="M 163 78 L 168 63 L 173 78 Z" class="muzzle-flash flash-outer hidden"/><path d="M 95 45 L 100 30 L 105 45 Z" class="muzzle-flash flash-nose hidden"/></g><path d="M 20 90 Q 100 60 180 90 Q 190 100 180 110 Q 100 120 20 110 Q 10 100 20 90 Z" fill="#556B2F" stroke="#334422" stroke-width="1"/><path d="M 40 95 Q 60 80 80 100 Q 70 115 50 110 Z" fill="#8B4513" opacity="0.7"/><path d="M 140 95 Q 160 80 170 100 Q 150 115 130 110 Z" fill="#8B4513" opacity="0.7"/><path d="M 80 160 L 120 160 L 125 175 L 75 175 Z" fill="#556B2F" stroke="#334422" stroke-width="1"/><ellipse cx="100" cy="110" rx="12" ry="70" fill="url(#fuselageGrad)"/><ellipse cx="100" cy="100" rx="6" ry="12" fill="#87CEEB" stroke="#4A5568" stroke-width="1.5"/><circle cx="50" cy="100" r="10" fill="#00247D"/><circle cx="50" cy="100" r="6" fill="white"/><circle cx="50" cy="100" r="3" fill="#C8102E"/><circle cx="150" cy="100" r="10" fill="#00247D"/><circle cx="150" cy="100" r="6" fill="white"/><circle cx="150" cy="100" r="3" fill="#C8102E"/><g id="turret-visual" class="opacity-0 transition-opacity duration-500" transform="translate(100, 130)"><circle cx="0" cy="0" r="8" fill="#87CEEB" stroke="#4A5568" stroke-width="1" opacity="0.8"/><g id="turret-gun"><rect x="-1" y="-14" width="2" height="14" fill="#111"/><path d="M -2 -14 L 0 -20 L 2 -14 Z" id="turret-flash"/></g></g><g transform="translate(0, 0)"><circle cx="100" cy="42" r="5" fill="#333"/><ellipse cx="100" cy="42" rx="45" ry="3" class="propeller-line"/></g></svg>`;
+        const do217Svg = `<svg viewBox="0 0 200 200" class="w-full h-full"><defs><linearGradient id="do217Grad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#2d3748;stop-opacity:1"/><stop offset="50%" style="stop-color:#4a5568;stop-opacity:1"/><stop offset="100%" style="stop-color:#2d3748;stop-opacity:1"/></linearGradient></defs><g transform="translate(50, 75)"><rect x="-10" y="-15" width="20" height="30" rx="5" fill="#2d3748"/><circle cx="0" cy="-15" r="4" fill="#222"/><ellipse cx="0" cy="-15" rx="35" ry="2" class="propeller-line"/></g><g transform="translate(150, 75)"><rect x="-10" y="-15" width="20" height="30" rx="5" fill="#2d3748"/><circle cx="0" cy="-15" r="4" fill="#222"/><ellipse cx="0" cy="-15" rx="35" ry="2" class="propeller-line"/></g><path d="M 10 90 L 190 90 L 180 110 L 120 110 L 120 130 L 80 130 L 80 110 L 20 110 Z" fill="#2d3748" stroke="#1a202c"/><path d="M 85 30 L 115 30 L 115 150 L 85 150 Z" fill="url(#do217Grad)"/><ellipse cx="100" cy="30" rx="15" ry="20" fill="#2d3748"/><path d="M 90 10 L 90 20 M 110 10 L 110 20 M 85 15 L 115 15" stroke="#a0aec0" stroke-width="2"/><rect x="70" y="150" width="60" height="15" fill="#2d3748"/><rect x="65" y="140" width="10" height="30" rx="2" fill="#2d3748"/><rect x="125" y="140" width="10" height="30" rx="2" fill="#2d3748"/><rect x="90" y="40" width="20" height="30" fill="#87CEEB" stroke="#4a5568"/><path d="M 30 95 L 50 95 M 40 85 L 40 105" stroke="white" stroke-width="2"/><path d="M 150 95 L 170 95 M 160 85 L 160 105" stroke="white" stroke-width="2"/><g id="do217-guns-nose" class="hidden firing-show"><rect x="92" y="25" width="2" height="10" fill="#111"/><path d="M 91 25 L 93 25 L 92 15 Z" class="muzzle-flash"/><rect x="96" y="25" width="2" height="10" fill="#111"/><path d="M 95 25 L 97 25 L 96 15 Z" class="muzzle-flash"/><rect x="102" y="25" width="2" height="10" fill="#111"/><path d="M 101 25 L 103 25 L 102 15 Z" class="muzzle-flash"/><rect x="106" y="25" width="2" height="10" fill="#111"/><path d="M 105 25 L 107 25 L 106 15 Z" class="muzzle-flash"/></g><g id="do217-guns-body" class="hidden firing-show"><rect x="88" y="50" width="2" height="8" fill="#111"/><path d="M 87 50 L 89 50 L 88 42 Z" class="muzzle-flash"/><rect x="110" y="50" width="2" height="8" fill="#111"/><path d="M 109 50 L 111 50 L 110 42 Z" class="muzzle-flash"/><rect x="86" y="55" width="2" height="8" fill="#111"/><path d="M 85 55 L 87 55 L 86 47 Z" class="muzzle-flash"/><rect x="112" y="55" width="2" height="8" fill="#111"/><path d="M 111 55 L 113 55 L 112 47 Z" class="muzzle-flash"/></g><g id="turret-visual" class="do217-turret" transform="translate(100, 80)"><circle cx="0" cy="0" r="8" fill="#87CEEB" stroke="#4A5568" stroke-width="1" opacity="0.8"/><g id="turret-gun"><rect x="-1" y="-16" width="2" height="16" fill="#111"/><path d="M -2 -16 L 0 -22 L 2 -16 Z" id="turret-flash"/></g></g></svg>`;
+        const enemySvgContent = `<svg viewBox="0 0 200 200" class="w-full h-full"><defs><linearGradient id="enemyGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#4a5568;stop-opacity:1"/><stop offset="50%" style="stop-color:#718096;stop-opacity:1"/><stop offset="100%" style="stop-color:#4a5568;stop-opacity:1"/></linearGradient></defs><path d="M 20 90 Q 100 70 180 90 L 180 100 L 20 100 Z" fill="#4a5568" stroke="#2d3748"/><path d="M 80 160 L 120 160 L 125 175 L 75 175 Z" fill="#4a5568"/><ellipse cx="100" cy="110" rx="12" ry="70" fill="url(#enemyGrad)"/><ellipse cx="100" cy="100" rx="6" ry="12" fill="#2c5282" stroke="#1a202c"/><path d="M 40 90 L 60 90 M 50 80 L 50 100" stroke="black" stroke-width="3"/><path d="M 140 90 L 160 90 M 150 80 L 150 100" stroke="black" stroke-width="3"/><g transform="translate(0, 0)"><circle cx="100" cy="42" r="5" fill="#222"/><ellipse cx="100" cy="42" rx="45" ry="3" class="propeller-line"/></g></svg>`;
+        const heavyEnemySvgContent = `<svg viewBox="0 0 200 200" class="w-full h-full"><defs><linearGradient id="do217Grad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#1a202c;stop-opacity:1"/><stop offset="50%" style="stop-color:#2d3748;stop-opacity:1"/><stop offset="100%" style="stop-color:#1a202c;stop-opacity:1"/></linearGradient></defs><g transform="translate(50, 75)"><rect x="-10" y="-15" width="20" height="30" rx="5" fill="#2d3748"/><ellipse cx="0" cy="-15" rx="35" ry="2" class="propeller-line"/></g><g transform="translate(150, 75)"><rect x="-10" y="-15" width="20" height="30" rx="5" fill="#2d3748"/><ellipse cx="0" cy="-15" rx="35" ry="2" class="propeller-line"/></g><path d="M 10 90 L 190 90 L 180 110 L 120 110 L 120 130 L 80 130 L 80 110 L 20 110 Z" fill="#2d3748" stroke="#000"/><path d="M 85 30 L 115 30 L 115 150 L 85 150 Z" fill="url(#do217Grad)"/><ellipse cx="100" cy="30" rx="15" ry="20" fill="#2d3748"/><path d="M 90 10 L 90 20 M 110 10 L 110 20 M 85 15 L 115 15" stroke="#a0aec0" stroke-width="2"/><rect x="70" y="150" width="60" height="15" fill="#2d3748"/><rect x="65" y="140" width="10" height="30" rx="2" fill="#2d3748"/><rect x="125" y="140" width="10" height="30" rx="2" fill="#2d3748"/><rect x="90" y="40" width="20" height="30" fill="#4a5568" stroke="#000"/><path d="M 30 95 L 50 95 M 40 85 L 40 105" stroke="white" stroke-width="2"/><path d="M 150 95 L 170 95 M 160 85 L 160 105" stroke="white" stroke-width="2"/><circle cx="100" cy="80" r="6" fill="#718096" stroke="black" opacity="0.7"/><line x1="100" y1="80" x2="100" y2="95" stroke="black" stroke-width="2"/></svg>`;
+        const aaGunSvg = `<svg viewBox="0 0 50 50" class="w-full h-full"><rect x="20" y="20" width="10" height="20" fill="#1f2937"/><rect x="22" y="10" width="6" height="15" fill="#000" class="aa-barrel"/></svg>`;
+        const carrierSvg = `<svg width="100%" height="100%" viewBox="0 0 100 400" preserveAspectRatio="none"><rect x="10" y="10" width="80" height="380" rx="10" fill="#475569" stroke="#334155" stroke-width="2"/><line x1="50" y1="30" x2="50" y2="370" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="10,5"/><circle cx="50" cy="50" r="8" stroke="#e2e8f0" stroke-width="2" fill="none"/><circle cx="50" cy="350" r="8" stroke="#e2e8f0" stroke-width="2" fill="none"/><rect x="80" y="150" width="15" height="60" fill="#334155" stroke="#1e293b"/><circle cx="10" cy="100" r="4" fill="#334155"/><circle cx="10" cy="300" r="4" fill="#334155"/><circle cx="90" cy="100" r="4" fill="#334155"/><circle cx="90" cy="300" r="4" fill="#334155"/></svg>`;
+        const navalEnemySvgContent = `<svg viewBox="0 0 200 200" class="w-full h-full"><path d="M 20 90 L 180 90 L 160 110 L 40 110 Z" fill="#1e3a8a" stroke="#172554"/><ellipse cx="100" cy="110" rx="10" ry="60" fill="#3b82f6"/><ellipse cx="100" cy="100" rx="6" ry="12" fill="#93c5fd"/><path d="M 80 160 L 120 160 L 120 170 L 80 170 Z" fill="#1e3a8a"/><circle cx="100" cy="50" r="5" fill="#333"/><ellipse cx="100" cy="50" rx="40" ry="3" class="propeller-line"/></svg>`;
+
+        playerBody.innerHTML = spitfireSvg;
+
+        const state = {
+            planeSize: 150,
+            x: window.innerWidth / 2 - 75, 
+            y: window.innerHeight / 2 - 75,
+            angle: 0,
+            speed: 0,
+            maxSpeed: 2.0,
+            turnSpeed: 3.0,
+            bankAngle: 0,
+            planeType: 'fighter',
+            
+            currentG: 1.0,
+            pilotStamina: 100,
+            maxPilotStamina: 100, 
+            playerHP: 100, 
+            maxPlayerHP: 100,
+            armorPlateHP: 0,
+            maxArmorPlateHP: 0,
+            isUnconscious: false,
+            recoveryTime: 0,
+            evasionChance: 0, 
+            isGodMode: false, // God Mode State
+            
+            weaponType: 'light',
+            weaponLevel: 1,
+            fireRateMod: 0,
+            lastFireTime: 0,
+
+            hasTurret: false,
+            turretLevel: 0,
+            turretCooldown: 0,
+            turretAngle: 0,
+            turretAmmo: 150,
+            turretMaxAmmo: 150,
+            turretReloadTimer: 0,
+            isTurretReloading: false,
+            
+            bombCooldown: 0,
+            maxBombCooldown: 1800,
+            
+            level: 1,
+            xp: 0,
+            nextLevelXP: 2,
+            killCount: 0,
+            pendingUpgrades: 0,
+
+            bullets: [],
+            enemies: [],
+            xpGems: [],
+            supportPlanes: [],
+            
+            islands: [],
+            aaZones: [], 
+            aaProjectiles: [],
+            carriers: [], 
+            
+            enemySpawnTimer: 0,
+            heavyEnemySpawnTimer: 0 
+        };
+
+        const upgradePool = [
+            {
+                id: 'pilot_training', title: '조종사 훈련', desc: '스태미나 증가 및 회복, 회피율 3% 증가.', condition: () => true, 
+                apply: () => { 
+                    state.maxPilotStamina += 30; 
+                    state.pilotStamina = state.maxPilotStamina;
+                    state.evasionChance = Math.min(20, state.evasionChance + 3); 
+                    updateWeaponVisuals();
+                }
+            },
+            {
+                id: 'armor_plate', title: '방탄판 장착', desc: '2~5회 피격 피해 80% 감소.', condition: () => true, apply: () => { const plates = Math.floor(Math.random() * 4) + 2; state.armorPlateHP = plates; state.maxArmorPlateHP = plates; updateWeaponVisuals(); }
+            },
+            {
+                id: 'turret', title: '후방 사수', desc: '후방 자동 사격.', condition: () => true, apply: () => { state.hasTurret = true; state.turretLevel++; updateWeaponVisuals(); }
+            },
+            {
+                id: 'weapon_level', title: '무장 강화', desc: '기관총 추가 장착.', condition: () => state.weaponLevel < 3 && state.planeType === 'fighter', apply: () => { state.weaponLevel++; updateWeaponVisuals(); }
+            },
+            {
+                id: 'weapon_heavy', title: '중기관총탄', desc: '데미지 증가, 연사 감소.', condition: () => state.weaponType === 'light', apply: () => { state.weaponType = 'heavy'; updateWeaponVisuals(); }
+            },
+            {
+                id: 'rapid_fire', title: '연사력 증가', desc: '기관총 발사 속도가 빨라집니다.', condition: () => true, apply: () => { state.fireRateMod += 1; }
+            },
+            {
+                id: 'repair', title: '긴급 수리', desc: '기체 내구도 60% 회복.', condition: () => state.playerHP < state.maxPlayerHP, apply: () => { state.playerHP = Math.min(state.maxPlayerHP, state.playerHP + Math.floor(state.maxPlayerHP * 0.6)); }
+            },
+            {
+                id: 'max_hp', title: '기체 보강', desc: '최대 내구도 30 증가 및 30% 회복.', condition: () => true, apply: () => { state.maxPlayerHP += 30; state.playerHP = Math.min(state.maxPlayerHP, state.playerHP + Math.floor(state.maxPlayerHP * 0.3)); }
+            },
+            {
+                id: 'engine', title: '엔진 튜닝', desc: '속도 및 선회력 증가.', condition: () => true, apply: () => { state.maxSpeed += 0.5; state.turnSpeed += 0.2; } 
+            },
+            {
+                id: 'armor_heavy', title: '기체 장갑 강화', desc: '최대 내구도 50 증가, 기동성 감소.', condition: () => true, apply: () => { state.maxPlayerHP += 50; state.playerHP = state.maxPlayerHP; state.maxSpeed = Math.max(1.0, state.maxSpeed - 0.4); state.turnSpeed = Math.max(1.0, state.turnSpeed - 0.3); }
+            }
+        ];
+
+        function updateWeaponVisuals() {
+            if (state.planeType === 'fighter') {
+                const lvl2Guns = document.querySelectorAll('.gun-lvl2');
+                const lvl3Guns = document.querySelectorAll('.gun-lvl3');
+                const lvl2Flash = document.querySelectorAll('.flash-outer');
+                const lvl3Flash = document.querySelectorAll('.flash-nose');
+                
+                const show = (els) => els.forEach(el => el.classList.remove('opacity-0', 'hidden'));
+                const hide = (els) => els.forEach(el => el.classList.add('opacity-0', 'hidden'));
+    
+                if (state.weaponLevel >= 2) { show(lvl2Guns); show(lvl2Flash); } else { hide(lvl2Guns); hide(lvl2Flash); }
+                if (state.weaponLevel >= 3) { show(lvl3Guns); show(lvl3Flash); } else { hide(lvl3Guns); hide(lvl3Flash); }
+            }
+
+            const typeStr = state.planeType === 'heavy' ? "20mm 기관포 x4" : (state.weaponType === 'light' ? "경기관총" : "중기관총");
+            weaponStatus.textContent = `${typeStr} ${state.planeType === 'fighter' ? 'LV.'+state.weaponLevel : ''}`;
+            
+            if (state.hasTurret) {
+                const turretEl = document.querySelector(state.planeType === 'heavy' ? '.do217-turret' : '#turret-visual');
+                if (turretEl) turretEl.classList.remove('opacity-0');
+                turretStatus.classList.remove('hidden');
+            }
+            
+            if (state.armorPlateHP > 0) {
+                armorStatus.classList.remove('hidden');
+                armorStatus.textContent = `방탄판: ${state.armorPlateHP} / ${state.maxArmorPlateHP}`;
+            } else {
+                armorStatus.classList.add('hidden');
+            }
+
+            if(hudEvasion) hudEvasion.textContent = `${state.evasionChance}%`;
+        }
+
+        function showMiss(x, y, text = "MISS!", className = "text-blue-400") {
+            const el = document.createElement('div');
+            el.className = 'miss-text';
+            el.textContent = text;
+            el.style.left = (x + 75) + 'px';
+            el.style.top = (y - 20) + 'px';
+            if (className) {
+                 // Remove existing text color classes just in case
+                 el.classList.remove('text-blue-400'); 
+                 // Add custom classes
+                 className.split(' ').forEach(c => el.classList.add(c));
+            }
+            effectContainer.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        function takeDamage(amount) {
+            if (state.isGodMode) return; // God Mode Check
+
+            if (Math.random() * 100 < state.evasionChance) {
+                showMiss(state.x, state.y);
+                return; 
+            }
+
+            let finalDamage = amount;
+            if (state.armorPlateHP > 0) {
+                finalDamage = Math.ceil(amount * 0.2); 
+                state.armorPlateHP--;
+                damageOverlay.classList.remove('hit'); damageOverlay.classList.add('armor-hit');
+                setTimeout(() => damageOverlay.classList.remove('armor-hit'), 200);
+                if (state.armorPlateHP <= 0) {
+                    armorBreakMsg.classList.remove('opacity-0');
+                    setTimeout(() => armorBreakMsg.classList.add('opacity-0'), 2000);
+                }
+                updateWeaponVisuals();
+            } else {
+                damageOverlay.classList.remove('armor-hit'); damageOverlay.classList.add('hit');
+                setTimeout(() => damageOverlay.classList.remove('hit'), 200);
+            }
+            state.playerHP -= finalDamage;
+            if (state.playerHP <= 0) { state.playerHP = 0; handleGameOver(); }
+        }
+
+        function onEnemyKilled(enemy) {
+             state.killCount++;
+             killDisplay.textContent = state.killCount;
+             if (state.killCount > 0 && state.killCount % 100 === 0) {
+                 state.pendingUpgrades += 2;
+                 const msg = document.createElement('div');
+                 msg.textContent = "BONUS UPGRADE! (KILL STREAK)";
+                 msg.className = "absolute top-1/3 left-1/2 transform -translate-x-1/2 text-yellow-400 font-bold text-4xl drop-shadow-lg animate-bounce z-50";
+                 document.body.appendChild(msg);
+                 setTimeout(() => msg.remove(), 3000);
+                 if (!isPaused) triggerLevelUp();
+             }
+             spawnXP(enemy.x + (enemy.type==='heavy'?90:50), enemy.y + (enemy.type==='heavy'?90:50), enemy.type === 'heavy');
+        }
+
+        function triggerBomb() {
+            if (state.bombCooldown > 0) return;
+            state.bombCooldown = state.maxBombCooldown;
+            [-80, 80].forEach(offset => {
+                const el = document.createElement('div');
+                el.className = 'plane-entity support-plane';
+                el.innerHTML = `<div class="plane-body firing">${spitfireSvg}</div>`;
+                const startX = Math.max(50, Math.min(window.innerWidth - 200, state.x + offset));
+                const startY = window.innerHeight + 150; 
+                supportContainer.appendChild(el);
+                state.supportPlanes.push({
+                    el: el, bodyEl: el.querySelector('.plane-body'), x: startX, y: startY, speed: 3, angle: 0, bankAngle: 0, life: 300, phase: 'enter', fireTimer: Math.floor(Math.random() * 10)
+                });
+            });
+            bombBar.style.width = '0%';
+            bombText.textContent = 'COOLDOWN';
+            bombText.className = 'text-red-400';
+        }
+
+        function updateSupportPlanes() {
+            for (let i = state.supportPlanes.length - 1; i >= 0; i--) {
+                const s = state.supportPlanes[i];
+                let targetAngle = 0;
+                let currentMaxTurn = 3.0; 
+                if (s.phase === 'enter') {
+                    s.y -= s.speed * 2; 
+                    if (s.y < window.innerHeight * 0.8) s.phase = 'fight';
+                    targetAngle = 0; 
+                } else if (s.phase === 'fight') {
+                    s.life--;
+                    let target = null; let minDist = 9999;
+                    state.enemies.forEach(e => {
+                        const d = Math.sqrt(Math.pow(e.x - s.x, 2) + Math.pow(e.y - s.y, 2));
+                        if (d < minDist) { minDist = d; target = e; }
+                    });
+                    if (target) {
+                        const dx = target.x - s.x; const dy = target.y - s.y;
+                        targetAngle = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+                    } else { targetAngle = 0; currentMaxTurn = 1.5; }
+                    let delta = targetAngle - s.angle;
+                    while (delta <= -180) delta += 360; while (delta > 180) delta -= 360;
+                    if (Math.abs(delta) > currentMaxTurn) s.angle += Math.sign(delta) * currentMaxTurn; else s.angle += delta;
+                    const targetBank = -(Math.max(-currentMaxTurn, Math.min(currentMaxTurn, delta))) * 15;
+                    s.bankAngle += (targetBank - s.bankAngle) * 0.1;
+                    const rad = (s.angle - 90) * Math.PI / 180;
+                    s.x += Math.cos(rad) * s.speed; s.y += Math.sin(rad) * s.speed;
+                    s.fireTimer++;
+                    if (s.fireTimer % 5 === 0) {
+                        const bullet = document.createElement('div');
+                        bullet.className = 'bullet support';
+                        bulletsContainer.appendChild(bullet);
+                        const bRad = (s.angle - 90) * Math.PI / 180;
+                        const bx = s.x + 75 + Math.cos(bRad) * 40;
+                        const by = s.y + 75 + Math.sin(bRad) * 40;
+                        const fireAngle = s.angle + (Math.random() - 0.5) * 8;
+                        state.bullets.push({
+                            el: bullet, x: bx, y: by, angle: fireAngle, speed: 22, life: 50, isEnemy: false, isSupport: true, damage: 5
+                        });
+                    }
+                    if (s.life <= 0) s.phase = 'leave';
+                } else if (s.phase === 'leave') {
+                    targetAngle = 0;
+                    let delta = targetAngle - s.angle;
+                    while (delta <= -180) delta += 360; while (delta > 180) delta -= 360;
+                    s.angle += delta * 0.1; s.bankAngle *= 0.9;
+                    const rad = (s.angle - 90) * Math.PI / 180;
+                    s.x += Math.cos(rad) * (s.speed * 1.5); s.y += Math.sin(rad) * (s.speed * 1.5);
+                    if (s.y < -200) { s.el.remove(); state.supportPlanes.splice(i, 1); continue; }
+                }
+                s.el.style.transform = `translate(${s.x}px, ${s.y}px) rotate(${s.angle}deg)`;
+                if(s.bodyEl) s.bodyEl.style.transform = `rotateY(${s.bankAngle}deg) rotateZ(${s.bankAngle * 0.5}deg)`;
+                if (s.phase === 'fight') {
+                    state.enemies.forEach((e, eIdx) => {
+                        if(e.hp <= 0) return;
+                        const cx = e.type === 'heavy' ? e.x + 90 : e.x + 50;
+                        const cy = e.type === 'heavy' ? e.y + 90 : e.y + 50;
+                        const dist = Math.sqrt(Math.pow((s.x+75)-cx, 2) + Math.pow((s.y+75)-cy, 2));
+                        if (dist < 80) {
+                            e.hp = 0; onEnemyKilled(e); e.el.remove(); state.enemies.splice(eIdx, 1);
+                        }
+                    });
+                }
+            }
+        }
+
+        function fireGuns() {
+            let baseRate = state.weaponType === 'light' ? 6 : 10;
+            baseRate = Math.max(2, baseRate - state.fireRateMod);
+            if (state.lastFireTime > 0) { state.lastFireTime--; return; }
+            state.lastFireTime = baseRate;
+
+            if (state.planeType === 'heavy') {
+                const centerX = state.x + 90; 
+                const centerY = state.y + 90;
+                const rad = state.angle * Math.PI / 180;
+                const gunOffsets = [
+                    {x: -5, y: -45}, {x: 5, y: -45}, {x: -12, y: -45}, {x: 12, y: -45}, 
+                    {x: -10, y: -20}, {x: 10, y: -20}, {x: -14, y: -20}, {x: 14, y: -20} 
+                ];
+                gunOffsets.forEach(off => {
+                    const gx = centerX + (off.x * Math.cos(rad) - off.y * Math.sin(rad));
+                    const gy = centerY + (off.x * Math.sin(rad) + off.y * Math.cos(rad));
+                    const bullet = document.createElement('div');
+                    bullet.className = off.y < -40 ? 'bullet cannon' : 'bullet light'; 
+                    bulletsContainer.appendChild(bullet);
+                    state.bullets.push({
+                        el: bullet, x: gx, y: gy, angle: state.angle + (Math.random()-0.5)*4,
+                        speed: state.speed + 20, life: 80, isEnemy: false, damage: off.y < -40 ? 4 : 2 
+                    });
+                });
+                const noseGuns = document.getElementById('do217-guns-nose');
+                const bodyGuns = document.getElementById('do217-guns-body');
+                if(noseGuns) noseGuns.classList.remove('hidden');
+                if(bodyGuns) bodyGuns.classList.remove('hidden');
+                setTimeout(() => {
+                      if(noseGuns) noseGuns.classList.add('hidden');
+                      if(bodyGuns) bodyGuns.classList.add('hidden');
+                }, 50);
+                return;
+            }
+
+            const planeHalfSize = state.planeSize / 2;
+            const centerX = state.x + planeHalfSize;
+            const centerY = state.y + planeHalfSize;
+            const scale = state.planeSize / 200;
+            let offsets = [];
+            offsets.push({ dx: -43 * scale, dy: -25 * scale });
+            offsets.push({ dx: 43 * scale, dy: -25 * scale });
+            if (state.weaponLevel >= 2) { offsets.push({ dx: -70 * scale, dy: -22 * scale }); offsets.push({ dx: 70 * scale, dy: -22 * scale }); }
+            if (state.weaponLevel >= 3) { offsets.push({ dx: 0, dy: -55 * scale }); }
+            const rad = state.angle * Math.PI / 180;
+
+            offsets.forEach(offset => {
+                const gunX = centerX + (offset.dx * Math.cos(rad) - offset.dy * Math.sin(rad));
+                const gunY = centerY + (offset.dx * Math.sin(rad) + offset.dy * Math.cos(rad));
+                const bullet = document.createElement('div');
+                bullet.className = `bullet ${state.weaponType}`;
+                bulletsContainer.appendChild(bullet);
+                const speed = state.weaponType === 'light' ? state.speed + 18 : state.speed + 22;
+                state.bullets.push({
+                    el: bullet, x: gunX, y: gunY, angle: state.angle + (Math.random() - 0.5) * 3,
+                    speed: speed, life: 80, isEnemy: false, damage: state.weaponType === 'light' ? 1 : 3
+                });
+            });
+        }
+
+        function updateTurret(playerCX, playerCY) {
+            if (!state.hasTurret) return;
+            if (state.isTurretReloading) {
+                state.turretReloadTimer--;
+                if (state.turretReloadTimer <= 0) {
+                    state.isTurretReloading = false;
+                    state.turretAmmo = state.turretMaxAmmo;
+                }
+                return; 
+            }
+            let closestDist = 9999; let target = null;
+            state.enemies.forEach(e => {
+                const cx = e.type === 'heavy' ? e.x + 90 : e.x + 50;
+                const cy = e.type === 'heavy' ? e.y + 90 : e.y + 50;
+                const dx = cx - playerCX; const dy = cy - playerCY;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < 350) {
+                    const worldTargetAngle = (Math.atan2(dy, dx) * 180 / Math.PI) + 90;
+                    let diff = worldTargetAngle - state.angle;
+                    while (diff <= -180) diff += 360; while (diff > 180) diff -= 360;
+                    if (Math.abs(diff) > 120) {
+                        if (dist < closestDist) { closestDist = dist; target = { x: cx, y: cy, worldAngle: worldTargetAngle }; }
+                    }
+                }
+            });
+
+            const turretGroup = document.querySelector(state.planeType === 'heavy' ? '.do217-turret' : '#turret-visual');
+            const gunEl = turretGroup ? turretGroup.querySelector('#turret-gun') : null;
+
+            if (target && gunEl) {
+                state.turretAngle = target.worldAngle - state.angle;
+                gunEl.setAttribute('transform', `rotate(${state.turretAngle}, 0, 0)`);
+                if (state.turretCooldown <= 0) {
+                    state.turretAmmo--;
+                    if (state.turretAmmo <= 0) {
+                        state.isTurretReloading = true; state.turretReloadTimer = 480; 
+                    }
+                    turretGroup.classList.add('firing');
+                    setTimeout(() => turretGroup.classList.remove('firing'), 50); 
+                    const bullet = document.createElement('div');
+                    bullet.className = 'bullet turret';
+                    bulletsContainer.appendChild(bullet);
+                    const scale = state.planeSize / 200;
+                    const offsetDy = (state.planeType === 'heavy' ? 0 : 30) * scale; 
+                    const barrelLen = 16; 
+                    const mathAngleRad = (target.worldAngle - 90) * Math.PI / 180;
+                    const rad = state.angle * Math.PI / 180;
+                    const turretCenterX = playerCX + (-offsetDy * Math.sin(rad)); 
+                    const turretCenterY = playerCY + (offsetDy * Math.cos(rad));
+                    const spawnX = turretCenterX + barrelLen * Math.cos(mathAngleRad);
+                    const spawnY = turretCenterY + barrelLen * Math.sin(mathAngleRad);
+                    state.bullets.push({
+                        el: bullet, x: spawnX, y: spawnY, angle: target.worldAngle,
+                        speed: 15, life: 60, isEnemy: false, damage: 0.5 * state.turretLevel
+                    });
+                    state.turretCooldown = 15; 
+                }
+            }
+            if (state.turretCooldown > 0) state.turretCooldown--;
+        }
+
+        function spawnIsland() {
+            const div = document.createElement('div');
+            div.className = 'island-entity';
+            const w = 200 + Math.random() * 300;
+            const h = 200 + Math.random() * 300;
+            div.style.width = w + 'px'; div.style.height = h + 'px';
+            const pts = []; const steps = 8;
+            for(let i=0; i<steps; i++) {
+                const ang = (i / steps) * Math.PI * 2;
+                const rad = (Math.min(w,h)/2) * (0.6 + Math.random()*0.4);
+                pts.push(`${(w/2)+Math.cos(ang)*rad},${(h/2)+Math.sin(ang)*rad}`);
+            }
+            const svg = `<svg width="100%" height="100%"><path d="M ${pts.join(' L ')} Z" fill="#15803d" stroke="#166534" stroke-width="2" opacity="0.8" /></svg>`;
+            div.innerHTML = svg;
+
+            const guns = [];
+            if (state.level >= 20) {
+                const gunCount = 1 + Math.floor(Math.random() * 2);
+                for(let i=0; i<gunCount; i++) {
+                      const gunEl = document.createElement('div');
+                      gunEl.className = 'aa-turret';
+                      gunEl.innerHTML = aaGunSvg;
+                      const gx = (w/2) + (Math.random()-0.5)*(w*0.5);
+                      const gy = (h/2) + (Math.random()-0.5)*(h*0.5);
+                      gunEl.style.left = gx + 'px'; gunEl.style.top = gy + 'px';
+                      div.appendChild(gunEl);
+                      guns.push({ el: gunEl, x: gx, y: gy, cooldown: 120 + Math.random()*120 });
+                }
+            }
+            const startX = Math.random() * (window.innerWidth - w);
+            const startY = -h - 50; 
+            landLayer.appendChild(div);
+            state.islands.push({ el: div, x: startX, y: startY, w: w, h: h, guns: guns });
+        }
+
+        function updateIslands() {
+            if (Math.random() < 0.005 && state.islands.length < 3) spawnIsland();
+            for (let i = state.islands.length - 1; i >= 0; i--) {
+                const isl = state.islands[i];
+                isl.y += 1.5; 
+                isl.el.style.transform = `translate(${isl.x}px, ${isl.y}px)`;
+                isl.guns.forEach(gun => {
+                    const wx = isl.x + gun.x;
+                    const wy = isl.y + gun.y;
+                    if (wy > 0 && wy < window.innerHeight) {
+                        const dx = (state.x + 75) - wx;
+                        const dy = (state.y + 75) - wy;
+                        const ang = Math.atan2(dy, dx) * 180 / Math.PI - 90; 
+                        gun.el.style.transform = `rotate(${ang}deg)`;
+                        if (gun.cooldown > 0) {
+                            gun.cooldown--;
+                        } else {
+                            const warn = document.createElement('div');
+                            warn.className = 'aa-zone'; 
+                            warn.style.width = '120px'; warn.style.height = '120px';
+                            const tx = state.x + 75 + (Math.random()-0.5)*100;
+                            const ty = state.y + 75 + (Math.random()-0.5)*100;
+                            warn.style.left = tx + 'px'; warn.style.top = ty + 'px';
+                            
+                            const inner = document.createElement('div');
+                            inner.className = 'aa-inner'; 
+                            warn.appendChild(inner);
+                            aaContainer.appendChild(warn);
+                            state.aaZones.push({ el: warn, x: tx, y: ty, timer: 120, exploded: false });
+                            gun.cooldown = 240; 
+                        }
+                    }
+                });
+                if (isl.y > window.innerHeight) { isl.el.remove(); state.islands.splice(i, 1); }
+            }
+            for (let i = state.aaZones.length - 1; i >= 0; i--) {
+                const z = state.aaZones[i];
+                z.timer--;
+                if (z.timer <= 0 && !z.exploded) {
+                    z.exploded = true;
+                    z.el.querySelector('.aa-inner').classList.add('aa-explosion');
+                    const dist = Math.sqrt(Math.pow((state.x+75) - z.x, 2) + Math.pow((state.y+75) - z.y, 2));
+                    if (dist < 80) takeDamage(30); 
+                }
+                if (z.timer < -30) { z.el.remove(); state.aaZones.splice(i, 1); }
+            }
+        }
+
+        function spawnCarrier() {
+             const div = document.createElement('div');
+             div.className = 'carrier-entity';
+             div.innerHTML = carrierSvg;
+             div.style.width = '100px'; div.style.height = '400px';
+             const startX = 100 + Math.random() * (window.innerWidth - 300);
+             const startY = -450;
+             landLayer.appendChild(div);
+             state.carriers.push({ el: div, x: startX, y: startY, spawnTimer: 0 });
+        }
+
+        function spawnCarrierAircraft(carrierX, carrierY) {
+             const el = document.createElement('div');
+             el.className = 'plane-entity naval-enemy';
+             const body = document.createElement('div');
+             body.className = 'plane-body';
+             body.innerHTML = navalEnemySvgContent;
+             el.appendChild(body);
+             enemiesContainer.appendChild(el);
+             el.style.transform = `translate(${carrierX}px, ${carrierY}px) scale(0.2)`;
+             state.enemies.push({
+                 el: el, bodyEl: body,
+                 x: carrierX + 20, y: carrierY + 200,
+                 angle: 0, speed: 2.5, hp: 8, cooldown: 60,
+                 mode: 'launch', scale: 0.2, type: 'naval'
+             });
+        }
+
+        function updateCarriers() {
+            if (state.level >= 15 && Math.random() < 0.001 && state.carriers.length < 1) {
+                spawnCarrier();
+            }
+            for (let i = state.carriers.length - 1; i >= 0; i--) {
+                const c = state.carriers[i];
+                c.y += 0.5; 
+                c.el.style.transform = `translate(${c.x}px, ${c.y}px)`;
+                c.spawnTimer++;
+                if (c.spawnTimer > 180) { 
+                    spawnCarrierAircraft(c.x, c.y);
+                    c.spawnTimer = 0;
+                }
+                if (c.y > window.innerHeight) { c.el.remove(); state.carriers.splice(i, 1); }
+            }
+        }
+
+        function spawnEnemy() {
+            const isLeft = Math.random() > 0.5;
+            const ex = isLeft ? -150 : window.innerWidth + 50;
+            const ey = Math.random() * window.innerHeight;
+            const el = document.createElement('div');
+            el.className = 'plane-entity';
+            el.style.width = '100px'; el.style.height = '100px';
+            const bodyEl = document.createElement('div');
+            bodyEl.className = 'plane-body';
+            bodyEl.innerHTML = enemySvgContent;
+            el.appendChild(bodyEl);
+            enemiesContainer.appendChild(el);
+            state.enemies.push({
+                el: el, bodyEl: bodyEl, x: ex, y: ey, angle: isLeft ? 90 : 270,
+                speed: 1, hp: 5, cooldown: Math.random() * 60, mode: 'chase', modeTimer: 0, turnDirection: 0, bankAngle: 0, type: 'normal' 
+            });
+        }
+
+        function spawnHeavyEnemy() {
+            if (state.level < 7) return;
+            const count = 2 + Math.floor((state.level - 7) / 5);
+            for(let i=0; i<count; i++) {
+                const isLeft = Math.random() > 0.5;
+                const ex = isLeft ? -180 : window.innerWidth + 50;
+                const ey = Math.random() * window.innerHeight;
+                const el = document.createElement('div');
+                el.className = 'plane-entity heavy-enemy';
+                const bodyEl = document.createElement('div');
+                bodyEl.className = 'plane-body';
+                bodyEl.innerHTML = heavyEnemySvgContent;
+                el.appendChild(bodyEl);
+                enemiesContainer.appendChild(el);
+                state.enemies.push({
+                    el: el, bodyEl: bodyEl, x: ex, y: ey, angle: isLeft ? 90 : 270,
+                    speed: 1.5, hp: 30, cooldown: 60, mode: 'chase', modeTimer: 0, turnDirection: 0, bankAngle: 0, type: 'heavy', turretCooldown: 0
+                });
+            }
+        }
+
+        function spawnXP(x, y, isHuge = false) {
+            const el = document.createElement('div');
+            el.className = `xp-orb ${isHuge ? 'huge' : (Math.random() > 0.8 ? 'rare' : '')}`; 
+            xpContainer.appendChild(el);
+            state.xpGems.push({
+                el: el, x: x, y: y, value: isHuge ? 50 : (el.classList.contains('rare') ? 3 : 1)
+            });
+        }
+
+        function gainXP(amount) {
+            state.xp += amount;
+            if (state.xp >= state.nextLevelXP) {
+                state.xp = 0; state.nextLevelXP = Math.ceil(state.nextLevelXP * 1.5); 
+                state.level++;
+                state.maxPilotStamina = Math.floor(state.maxPilotStamina * 1.05);
+                state.pilotStamina = state.maxPilotStamina; 
+                levelDisplay.textContent = state.level;
+                state.pendingUpgrades++;
+                if (!levelUpScreen.classList.contains('active')) triggerLevelUp();
+            }
+            const percent = Math.min(100, (state.xp / state.nextLevelXP) * 100);
+            xpBar.style.width = `${percent}%`;
+        }
+
+        function triggerLevelUp() {
+            document.exitPointerLock();
+            isPaused = true;
+            levelUpScreen.classList.add('active');
+            const title = levelUpScreen.querySelector('h2');
+            if(state.pendingUpgrades > 1) {
+                 title.textContent = `UPGRADE! (${state.pendingUpgrades} Left)`;
+                 title.className = "text-5xl font-bold text-green-400 mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]";
+            } else {
+                 title.textContent = "LEVEL UP!";
+                 title.className = "text-5xl font-bold text-yellow-400 mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.5)]";
+            }
+            cardsContainer.innerHTML = '';
+            let cardCount = 3;
+            if (state.level >= 15) cardCount = 5; else if (state.level >= 10) cardCount = 4;
+            if (cardCount > 3) cardsContainer.classList.add('flex-wrap', 'justify-center');
+            else cardsContainer.classList.remove('flex-wrap', 'justify-center');
+            let availableUpgrades = upgradePool.filter(up => up.condition());
+            const choices = [];
+            for(let i=0; i<cardCount; i++) {
+                if(availableUpgrades.length === 0) break;
+                const randIdx = Math.floor(Math.random() * availableUpgrades.length);
+                choices.push(availableUpgrades[randIdx]);
+                availableUpgrades.splice(randIdx, 1);
+            }
+            choices.forEach(choice => {
+                const card = document.createElement('div');
+                card.className = 'upgrade-card w-48 h-64 p-4 rounded-xl flex flex-col items-center justify-between cursor-pointer';
+                card.innerHTML = `
+                    <div class="text-center">
+                        <div class="text-4xl mb-4">✨</div>
+                        <h3 class="text-yellow-400 font-bold text-lg mb-2 leading-tight">${choice.title}</h3>
+                        <p class="text-gray-300 text-sm">${choice.desc}</p>
+                    </div>
+                    <div class="text-xs text-gray-500 font-mono mt-2">클릭하여 선택</div>
+                `;
+                card.onclick = () => {
+                    choice.apply();
+                    state.pendingUpgrades--;
+                    if (state.pendingUpgrades > 0) triggerLevelUp(); else closeLevelUp();
+                };
+                cardsContainer.appendChild(card);
+            });
+        }
+
+        function closeLevelUp() {
+            levelUpScreen.classList.remove('active');
+            isPaused = false;
+            virtualMouseX = state.x + 75; virtualMouseY = state.y + 75;
+            document.body.requestPointerLock();
+        }
+
+        function handleGameOver() {
+            if (isGameOver) return;
+            isGameOver = true;
+            document.exitPointerLock();
+            document.getElementById('final-level').textContent = state.level;
+            document.getElementById('final-kill').textContent = state.killCount;
+            gameOverScreen.classList.add('active');
+        }
+
+        function updateGameLogic() {
+            if (isGameOver || isPaused) return;
+
+            updateIslands(); 
+            updateCarriers();
+
+            state.enemySpawnTimer++;
+            const maxEnemies = 4 + (state.level * 2);
+            if (state.enemySpawnTimer > 120) { 
+                if (state.enemies.length < maxEnemies) spawnEnemy(); 
+                state.enemySpawnTimer = 0;
+            }
+
+            if (state.level >= 7) {
+                state.heavyEnemySpawnTimer++;
+                if (state.heavyEnemySpawnTimer > 600) { 
+                    spawnHeavyEnemy(); state.heavyEnemySpawnTimer = 0;
+                }
+            }
+
+            if (state.bombCooldown > 0) {
+                state.bombCooldown--;
+                const percent = 100 - (state.bombCooldown / state.maxBombCooldown * 100);
+                bombBar.style.width = `${percent}%`;
+                bombText.textContent = (state.bombCooldown / 60).toFixed(1) + "s";
+                bombText.className = ""; 
+            } else {
+                bombBar.style.width = '100%';
+                bombText.textContent = 'READY';
+                bombText.className = "text-yellow-300 font-bold animate-pulse";
+            }
+            updateSupportPlanes();
+
+            const playerCX = state.x + state.planeSize / 2;
+            const playerCY = state.y + state.planeSize / 2;
+
+            updateTurret(playerCX, playerCY);
+
+            for (let i = state.enemies.length - 1; i >= 0; i--) {
+                const e = state.enemies[i];
+                
+                if (e.type === 'naval') {
+                    if (e.mode === 'launch') {
+                        e.scale += 0.01;
+                        e.y -= 1;
+                        e.el.style.transform = `translate(${e.x}px, ${e.y}px) scale(${e.scale}) rotate(${e.angle}deg)`;
+                        if (e.scale >= 1.0) { e.mode = 'chase'; e.scale = 1.0; }
+                        continue;
+                    }
+                }
+
+                const cx = (e.type === 'heavy') ? e.x + 90 : (e.type === 'naval' ? e.x + 60 : e.x + 50);
+                const cy = (e.type === 'heavy') ? e.y + 90 : (e.type === 'naval' ? e.y + 60 : e.y + 50);
+                const dx = playerCX - cx; const dy = playerCY - cy;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                let targetAngle = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+                let turnSpeed = e.type === 'heavy' ? 0.3 : 0.5;
+
+                if (e.mode === 'chase') {
+                    if (dist < 150 && e.type !== 'naval') { e.mode = 'pass'; e.modeTimer = 90; }
+                } else if (e.mode === 'pass') {
+                    targetAngle = e.angle; e.modeTimer--;
+                    if (e.modeTimer <= 0) {
+                        e.mode = 'turn';
+                        let delta = targetAngle - e.angle;
+                        while (delta <= -180) delta += 360; while (delta > 180) delta -= 360;
+                        e.turnDirection = delta > 0 ? 1 : -1;
+                    }
+                } else if (e.mode === 'turn') {
+                    targetAngle = e.angle + (e.turnDirection * 90);
+                    let finalTarget = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+                    let angleDiff = Math.abs((finalTarget - e.angle + 360) % 360);
+                    if (angleDiff > 180) angleDiff = 360 - angleDiff;
+                    if (angleDiff < 15) e.mode = 'chase';
+                }
+
+                let deltaAngle = targetAngle - e.angle;
+                while (deltaAngle <= -180) deltaAngle += 360; while (deltaAngle > 180) deltaAngle -= 360;
+                let turnAmount = deltaAngle;
+                if (Math.abs(deltaAngle) > turnSpeed) {
+                    turnAmount = deltaAngle > 0 ? turnSpeed : -turnSpeed;
+                }
+                e.angle += turnAmount;
+
+                const targetBank = -turnAmount * 40; 
+                e.bankAngle += (targetBank - e.bankAngle) * 0.05;
+                const currentSpeed = e.mode === 'pass' ? e.speed * 1.2 : e.speed;
+                const rad = (e.angle - 90) * Math.PI / 180;
+                e.x += Math.cos(rad) * currentSpeed; e.y += Math.sin(rad) * currentSpeed;
+                e.el.style.transform = `translate(${e.x}px, ${e.y}px) rotate(${e.angle}deg)`;
+                e.bodyEl.style.transform = `rotateY(${e.bankAngle}deg) rotateZ(${e.bankAngle * 0.5}deg)`;
+
+                if (e.mode === 'chase' && dist < 400 && e.cooldown <= 0) {
+                    let aimTargetAngle = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+                    let aimDiff = Math.abs((aimTargetAngle - e.angle + 360) % 360);
+                    if (aimDiff > 180) aimDiff = 360 - aimDiff;
+
+                    if (aimDiff < 30) {
+                        if (e.type === 'heavy') {
+                            const offsets = [-20, -10, 10, 20];
+                            offsets.forEach(off => {
+                                const bullet = document.createElement('div');
+                                bullet.className = 'bullet enemy-heavy'; 
+                                bulletsContainer.appendChild(bullet);
+                                const brad = e.angle * Math.PI / 180;
+                                const bx = cx + (off * Math.cos(brad)); const by = cy + (off * Math.sin(brad));
+                                state.bullets.push({ el: bullet, x: bx, y: by, angle: e.angle + (Math.random()-0.5)*6, speed: 2, life: 1200, isEnemy: true });
+                            });
+                            e.cooldown = 120; 
+                        } else {
+                            const bullet = document.createElement('div');
+                            bullet.className = 'bullet enemy';
+                            bulletsContainer.appendChild(bullet);
+                            state.bullets.push({ el: bullet, x: cx, y: cy, angle: e.angle + (Math.random()-0.5)*5, speed: 1, life: 800, isEnemy: true });
+                            e.cooldown = 90; 
+                        }
+                    }
+                }
+                e.cooldown--;
+
+                if (e.type === 'heavy') {
+                    if (e.turretCooldown <= 0) {
+                        let playerRelAngle = (Math.atan2(dy, dx) * 180 / Math.PI) + 90;
+                        let diff = playerRelAngle - e.angle;
+                        while(diff <= -180) diff += 360; while(diff > 180) diff -= 360;
+                        if (Math.abs(diff) > 120 && dist < 300) {
+                            const bullet = document.createElement('div');
+                            bullet.className = 'bullet enemy'; 
+                            bulletsContainer.appendChild(bullet);
+                            state.bullets.push({ el: bullet, x: cx, y: cy, angle: playerRelAngle, speed: 1.5, life: 600, isEnemy: true });
+                            e.turretCooldown = 30;
+                        }
+                    } else { e.turretCooldown--; }
+                }
+
+                if (dist < 80) {
+                    const collisionDmg = Math.max(1, Math.ceil(state.maxPlayerHP * 0.05));
+                    takeDamage(collisionDmg);
+                    e.hp = 0; onEnemyKilled(e); e.el.remove(); state.enemies.splice(i, 1);
+                    continue;
+                }
+            }
+
+            for (let i = state.xpGems.length - 1; i >= 0; i--) {
+                const gem = state.xpGems[i];
+                const idx = gem.x + 9 - playerCX;
+                const idy = gem.y + 9 - playerCY;
+                const dist = Math.sqrt(idx*idx + idy*idy);
+                if (dist < 200) {
+                    const speed = (250 - dist) * 0.15;
+                    gem.x -= (idx / dist) * speed;
+                    gem.y -= (idy / dist) * speed;
+                }
+                gem.el.style.transform = `translate(${gem.x}px, ${gem.y}px)`;
+                if (dist < 50) { gainXP(gem.value); gem.el.remove(); state.xpGems.splice(i, 1); }
+            }
+
+            for (let i = state.bullets.length - 1; i >= 0; i--) {
+                const b = state.bullets[i];
+                const rad = (b.angle - 90) * Math.PI / 180;
+                b.x += Math.cos(rad) * b.speed;
+                b.y += Math.sin(rad) * b.speed;
+                b.life--;
+                b.el.style.transform = `translate(${b.x}px, ${b.y}px) rotate(${b.angle}deg)`;
+                let hit = false;
+                if (b.isEnemy) {
+                    const dx = b.x - playerCX; const dy = b.y - playerCY;
+                    if (Math.sqrt(dx*dx + dy*dy) < 40) { takeDamage(5); hit = true; }
+                } else {
+                    for (let j = state.enemies.length - 1; j >= 0; j--) {
+                        const e = state.enemies[j];
+                        const cx = (e.type === 'heavy') ? e.x + 90 : (e.type === 'naval' ? e.x + 60 : e.x + 50);
+                        const cy = (e.type === 'heavy') ? e.y + 90 : (e.type === 'naval' ? e.y + 60 : e.y + 50);
+                        const dx = b.x - cx; const dy = b.y - cy;
+                        if (Math.sqrt(dx*dx + dy*dy) < (e.type === 'heavy' ? 60 : 40)) {
+                            e.hp -= b.damage; hit = true;
+                            if (e.hp <= 0) { onEnemyKilled(e); e.el.remove(); state.enemies.splice(j, 1); }
+                            break;
+                        }
+                    }
+                }
+                if (hit || b.life <= 0 || b.x < -50 || b.x > window.innerWidth + 50 || b.y < -50 || b.y > window.innerHeight + 50) {
+                    b.el.remove(); state.bullets.splice(i, 1);
+                }
+            }
+        }
+
+        function gameLoop() {
+            if (isGameOver || isPaused) {
+                isLoopRunning = false;
+                return;
+            }
+            isLoopRunning = true;
+
+            const planeHalfSize = state.planeSize / 2;
+            const centerX = state.x + planeHalfSize;
+            const centerY = state.y + planeHalfSize;
+            const dx = virtualMouseX - centerX; 
+            const dy = virtualMouseY - centerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            let targetAngle = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+            let deltaAngle = targetAngle - state.angle;
+            while (deltaAngle <= -180) deltaAngle += 360;
+            while (deltaAngle > 180) deltaAngle -= 360;
+
+            let turnAmount = 0;
+            let targetSpeed = 0;
+
+            if (state.isUnconscious) {
+                turnAmount = 0;
+                targetSpeed = 2;
+                state.recoveryTime--;
+                if (isMouseDown) playerContainer.classList.remove('firing');
+                if (state.recoveryTime <= 0) {
+                    state.isUnconscious = false;
+                    state.pilotStamina = 30;
+                    locWarning.classList.add('hidden');
+                }
+                state.bankAngle *= 0.95;
+            } else {
+                if (Math.abs(deltaAngle) > state.turnSpeed) turnAmount = deltaAngle > 0 ? state.turnSpeed : -state.turnSpeed;
+                else turnAmount = deltaAngle;
+                if (distance < 20) turnAmount = 0;
+
+                targetSpeed = Math.min(distance * 0.06, state.maxSpeed);
+                if (distance < 20) targetSpeed = 0;
+                
+                const targetBank = -turnAmount * 10; 
+                state.bankAngle += (targetBank - state.bankAngle) * 0.1;
+
+                if (isMouseDown) fireGuns();
+                else if (state.lastFireTime > 0) state.lastFireTime--;
+            }
+
+            const gFactor = (Math.abs(turnAmount) * 0.8) + (state.speed * Math.abs(turnAmount) * 0.05);
+            state.currentG = 1.0 + gFactor;
+
+            if (state.currentG > 3.5) {
+                const fatigue = (state.currentG - 3.5) * 0.8;
+                state.pilotStamina = Math.max(0, state.pilotStamina - fatigue);
+            } else {
+                state.pilotStamina = Math.min(state.maxPilotStamina, state.pilotStamina + 0.5);
+            }
+
+            if (!state.isUnconscious && state.pilotStamina <= 0) {
+                state.isUnconscious = true;
+                state.recoveryTime = 300;
+                locWarning.classList.remove('hidden');
+            }
+
+            state.angle += turnAmount;
+            state.speed += (targetSpeed - state.speed) * 0.05;
+
+            const rad = (state.angle - 90) * Math.PI / 180;
+            state.x += Math.cos(rad) * state.speed;
+            state.y += Math.sin(rad) * state.speed;
+
+            playerContainer.style.transform = `translate(${state.x}px, ${state.y}px) rotate(${state.angle}deg)`;
+            playerBody.style.transform = `rotateY(${state.bankAngle}deg) rotateZ(${state.bankAngle * 0.5}deg)`;
+
+            // UI Updates
+            hudSpeed.textContent = (state.speed * 40).toFixed(0); 
+            const gValue = state.currentG.toFixed(1);
+            hudG.textContent = gValue;
+            hudG.className = state.currentG > 5 ? "font-bold text-red-600 animate-pulse" : (state.currentG > 3 ? "font-bold text-yellow-400" : "font-bold text-green-400");
+            
+            const staminaPercent = (state.pilotStamina / state.maxPilotStamina) * 100;
+            staminaBar.style.width = `${staminaPercent}%`;
+            staminaBar.className = staminaPercent < 30 ? "h-full bg-red-600" : (staminaPercent < 60 ? "h-full bg-yellow-400" : "h-full bg-green-500");
+            staminaText.textContent = `${state.pilotStamina.toFixed(0)} / ${state.maxPilotStamina}`;
+
+            const hpPercent = (state.playerHP / state.maxPlayerHP) * 100;
+            hpBar.style.width = `${hpPercent}%`;
+            hpText.textContent = `${hpPercent.toFixed(0)}%`;
+            hpBar.className = hpPercent <= 20 ? "h-full bg-red-600 transition-all duration-200" : (hpPercent <= 50 ? "h-full bg-yellow-400 transition-all duration-200" : "h-full bg-blue-500 transition-all duration-200");
+
+            if (state.hasTurret) {
+                if (state.isTurretReloading) {
+                    turretStatus.textContent = `재장전 중 ${(state.turretReloadTimer / 60).toFixed(1)}초`;
+                    turretStatus.className = "text-[10px] text-red-400 animate-pulse";
+                } else {
+                    turretStatus.textContent = `후방 터렛 LV.${state.turretLevel} (${state.turretAmmo}/${state.turretMaxAmmo})`;
+                    turretStatus.className = "text-[10px] text-orange-300";
+                }
+                turretStatus.classList.remove('hidden');
+            }
+
+            if (state.armorPlateHP > 0) {
+                armorStatus.classList.remove('hidden');
+                armorStatus.textContent = `방탄판: ${state.armorPlateHP} / ${state.maxArmorPlateHP}`;
+            } else {
+                armorStatus.classList.add('hidden');
+            }
+
+            let blackoutOpacity = state.pilotStamina < 50 ? (50 - state.pilotStamina) / 50 : 0;
+            if (state.isUnconscious) blackoutOpacity = Math.max(blackoutOpacity, 0.95);
+            document.getElementById('blackout-overlay').style.opacity = blackoutOpacity;
+            targetCursor.style.opacity = state.isUnconscious ? 0 : 1;
+
+            updateGameLogic();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        updateWeaponVisuals();
+    </script>
+</body>
+</html>
